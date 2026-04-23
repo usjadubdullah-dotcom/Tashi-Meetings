@@ -184,7 +184,7 @@ def parse_datetime(date_str: str, time_str: str) -> datetime | None:
 async def schedule_meeting(ctx: commands.Context):
     """
     Starts a conversational meeting scheduler in DM with the team lead.
-    Collects: topic, date, time, optional agenda/notes.
+    Collects: topic, date, and time.
     Then notifies all their members and schedules reminders.
     """
     lead = ctx.author
@@ -270,21 +270,8 @@ async def schedule_meeting(ctx: commands.Context):
             )
             return
 
-        # ── Step 4: Optional agenda ────────────────────────────────────────────
-        agenda_raw = await ask(
-            dm,
-            "**4️⃣  Any agenda or notes to share with the team?** _(optional)_\n"
-            "Type your notes, or type `skip` to leave this blank.",
-            lead.id,
-        )
-        if agenda_raw is None or agenda_raw.lower() == "cancel":
-            await dm.send("🚫 Scheduling cancelled.")
-            return
-        agenda = None if agenda_raw.lower() == "skip" else agenda_raw
-
         # ── Confirmation ───────────────────────────────────────────────────────
         formatted_dt = meeting_dt.strftime("%A, %d %B %Y at %I:%M %p")
-        agenda_line  = f"\n📋 **Agenda:** {agenda}" if agenda else ""
         members      = get_my_members(lead.id)
         count        = len(members)
         noun         = "member" if count == 1 else "members"
@@ -293,7 +280,7 @@ async def schedule_meeting(ctx: commands.Context):
             dm,
             f"✅ **Here's your meeting summary:**\n\n"
             f"📌 **Topic:** {topic}\n"
-            f"📅 **Date & Time:** {formatted_dt} (PKT){agenda_line}\n"
+            f"📅 **Date & Time:** {formatted_dt} (PKT)\n"
             f"👥 **Notifying:** {count} {noun}\n\n"
             f"Type **`confirm`** to schedule, or **`cancel`** to discard.",
             lead.id,
@@ -308,7 +295,6 @@ async def schedule_meeting(ctx: commands.Context):
             "id":          meeting_id,
             "topic":       topic,
             "datetime":    meeting_dt,
-            "agenda":      agenda,
             "lead_id":     lead.id,
             "lead_name":   get_lead_display_name(lead.id),
             "member_ids":  members,
@@ -341,14 +327,13 @@ def build_meeting_card(meeting: dict, headline: str) -> str:
     dt: datetime = meeting["datetime"]
     formatted_dt = dt.strftime("%A, %d %B %Y")
     formatted_tm = dt.strftime("%I:%M %p")
-    agenda_line  = f"\n📋 **Agenda:** {meeting['agenda']}" if meeting.get("agenda") else ""
     id_line      = f"\n🔖 **Meeting ID:** `{meeting['id']}`"
 
     return (
         f"{headline}\n\n"
         f"📌 **Topic:** {meeting['topic']}\n"
         f"📅 **Date:** {formatted_dt}\n"
-        f"🕐 **Time:** **{formatted_tm}** (Pakistan Standard Time){agenda_line}"
+        f"🕐 **Time:** **{formatted_tm}** (Pakistan Standard Time)"
         f"{id_line}"
     )
 
