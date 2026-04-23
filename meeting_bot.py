@@ -439,47 +439,166 @@ async def send_five_minute_reminder(meeting: dict):
     log.info("5-minute reminder + Meet link sent for meeting %s: %s", meeting["id"], meet_link)
 
 
+async def send_instant_meeting_now(meeting: dict):
+    """
+    Sends an instant notification with the Meet link to everyone
+    when the meeting is scheduled with less than 5 minutes to go.
+    """
+    dt: datetime = meeting["datetime"]
+    time_str     = dt.strftime("%I:%M %p")
+    meet_link    = generate_meet_link()
+    lead_display = meeting["lead_name"]
+
+    # Save the link into the meeting record
+    meeting["meet_link"] = meet_link
+
+    msg = (
+        f"🚨 **Meeting Starting Very Soon!**\n\n"
+        f"📣 **{lead_display}** has just scheduled a meeting that begins imminently.\n\n"
+        f"📌 **Topic:** {meeting['topic']}\n"
+        f"🕐 **Time:** **{time_str} PKT**\n"
+        f"🔗 **Join Link:** {meet_link}\n\n"
+        f"**Please join now! 👋**\n"
+        f"{'─' * 40}"
+    )
+
+    all_recipients = [meeting["lead_id"]] + meeting["member_ids"]
+    for uid in all_recipients:
+        await dm_user(uid, msg)
+        await asyncio.sleep(0.5)
+
+    log.info("Instant meeting notification (< 5 min) sent for meeting %s: %s", meeting["id"], meet_link)
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 #                     R E M I N D E R   S C H E D U L E R
 # ═══════════════════════════════════════════════════════════════════════════════
 
 async def schedule_reminders(meeting: dict):
     """
-    Waits until 1 hour before the meeting → sends reminder.
-    Waits until 5 minutes before the meeting → sends link + reminder.
-    Cleans up the meeting record afterward.
+    Smart reminder logic based on how far away the meeting is when scheduled:
+
+    Case 1 — More than 1 hour away:
+        → Send 1-hour reminder at T-1h
+        → Send 5-minute reminder + link at T-5min
+
+    Case 2 — Between 5 minutes and 1 hour away:
+        → Skip 1-hour reminder (already past)
+        → Send instant notification NOW (no link yet)
+        → Send 5-minute reminder + link at T-5min
+
+    Case 3 — Less than 5 minutes away:
+        → Send instant notification + link NOW to everyone
+        → Skip both scheduled reminders (already too late)
     """
-    meeting_id = meeting["id"]
+    meeting_id  = meeting["id"]
     meeting_dt: datetime = meeting["datetime"]
-    now = datetime.now(TIMEZONE)
+    now         = datetime.now(TIMEZONE)
+
+    minutes_until_meeting = (meeting_dt - now).total_seconds() / 60
 
     one_hour_before  = meeting_dt - timedelta(hours=1)
     five_mins_before = meeting_dt - timedelta(minutes=5)
 
-    # ── 1-hour reminder ────────────────────────────────────────────────────────
+    # ── Case 3: Less than 5 minutes away → instant message + link ─────────────
+    if minutes_until_meeting <= 5:
+        log.info(
+            "Meeting %s is in %.1f min (< 5 min). Sending instant notification with link.",
+            meeting_id, minutes_until_meeting
+        )
+        if meeting_id in scheduled_meetings:
+            await send_instant_meeting_now(meeting)
+        scheduled_meetings.pop(meeting_id, None)
+        log.info("Meeting %s completed and removed from schedule.", meeting_id)
+        return
+
+    # ── Case 2: Between 5 min and 1 hour away ─────────────────────────────────
+    if minutes_until_meeting <= 60:
+        log.info(
+            "Meeting %s is in %.1f min (5 min – 1 hr). Sending instant notification now, link at T-5.",
+            meeting_id, minutes_until_meeting
+        )
+        # Send an instant heads-up (no link yet)
+        if meeting_id in scheduled_meetings:
+            await send_short_notice_alert(meeting, minutes_until_meeting)
+
+        # Wait until 5 minutes before, then send the link
+        now = datetime.now(TIMEZONE)
+        wait_5m = (five_mins_before - now).total_seconds()
+        if wait_5m > 0:
+            log.info("Meeting %s: 5-minute reminder fires in %.0f seconds.", meeting_id, wait_5m)
+            await asyncio.sleep(wait_5m)
+            if meeting_id in scheduled_meetings:
+                await send_five_minute_reminder(meeting)
+        else:
+            # Edge case: by the time we get here it's already < 5 min
+            if meeting_id in scheduled_meetings:
+                await send_five_minute_reminder(meeting)
+
+        scheduled_meetings.pop(meeting_id, None)
+        log.info("Meeting %s completed and removed from schedule.", meeting_id)
+        return
+
+    # ── Case 1: More than 1 hour away → normal flow ───────────────────────────
+    log.info(
+        "Meeting %s is in %.1f min (> 1 hr). Normal reminder schedule.",
+        meeting_id, minutes_until_meeting
+    )
+
+    # 1-hour reminder
     wait_1h = (one_hour_before - now).total_seconds()
     if wait_1h > 0:
         log.info("Meeting %s: 1-hour reminder fires in %.0f seconds.", meeting_id, wait_1h)
         await asyncio.sleep(wait_1h)
-        if meeting_id in scheduled_meetings:   # still not cancelled
+        if meeting_id in scheduled_meetings:
             await send_one_hour_reminder(meeting)
     else:
         log.info("Meeting %s: 1-hour window already passed, skipping that reminder.", meeting_id)
 
-    # ── 5-minute reminder ──────────────────────────────────────────────────────
+    # 5-minute reminder
     now = datetime.now(TIMEZONE)
     wait_5m = (five_mins_before - now).total_seconds()
     if wait_5m > 0:
         log.info("Meeting %s: 5-minute reminder fires in %.0f seconds.", meeting_id, wait_5m)
         await asyncio.sleep(wait_5m)
-        if meeting_id in scheduled_meetings:   # still not cancelled
+        if meeting_id in scheduled_meetings:
             await send_five_minute_reminder(meeting)
     else:
         log.info("Meeting %s: 5-minute window already passed, skipping that reminder.", meeting_id)
 
-    # ── Cleanup ────────────────────────────────────────────────────────────────
+    # Cleanup
     scheduled_meetings.pop(meeting_id, None)
     log.info("Meeting %s completed and removed from schedule.", meeting_id)
+
+
+async def send_short_notice_alert(meeting: dict, minutes_until: float):
+    """
+    Instant heads-up sent when a meeting is scheduled between 5 min and 1 hour away.
+    No link yet — the link comes in the 5-minute reminder.
+    """
+    dt: datetime = meeting["datetime"]
+    time_str     = dt.strftime("%I:%M %p")
+    lead_display = meeting["lead_name"]
+    mins_rounded = round(minutes_until)
+
+    msg = (
+        f"⚡ **Meeting Scheduled — Starting Soon!**\n\n"
+        f"📣 **{lead_display}** has just scheduled a meeting in approximately "
+        f"**{mins_rounded} minute(s)**.\n\n"
+        f"📌 **Topic:** {meeting['topic']}\n"
+        f"🕐 **Time:** **{time_str} PKT**\n"
+        f"🔖 **Meeting ID:** `{meeting['id']}`\n\n"
+        f"🔗 The **join link** will be sent **5 minutes** before the meeting starts.\n"
+        f"Please get ready! 🙌\n"
+        f"{'─' * 40}"
+    )
+
+    all_recipients = [meeting["lead_id"]] + meeting["member_ids"]
+    for uid in all_recipients:
+        await dm_user(uid, msg)
+        await asyncio.sleep(0.5)
+
+    log.info("Short-notice alert sent for meeting %s (%.1f min away)", meeting["id"], minutes_until)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
