@@ -208,14 +208,14 @@ async def schedule_meeting(ctx: commands.Context):
 
     await dm.send(
         f"📅 **Let's schedule a meeting for your team!**\n"
-        f"I'll ask you a few quick questions. You have **2 minutes** to answer each one.\n"
+        f"Answer the following questions (you have 2 minutes for each question)\n"
         f"Type `cancel` at any time to stop.\n"
         f"{'─' * 40}"
     )
 
     try:
         # ── Step 1: Topic ──────────────────────────────────────────────────────
-        topic = await ask(dm, "**1️⃣  What is the meeting topic or title?**\n_(e.g. Weekly Sprint Review, Design Sync)_", lead.id)
+        topic = await ask(dm, "**1️⃣  What is the meeting topic or title?**", lead.id)
         if not topic or topic.lower() == "cancel":
             await dm.send("🚫 Scheduling cancelled.")
             return
@@ -249,7 +249,7 @@ async def schedule_meeting(ctx: commands.Context):
         while True:
             time_raw = await ask(
                 dm,
-                "**3️⃣  What time is the meeting? (Karachi time)**\n_(Format: `HH:MM` 24-hour or `H:MM AM/PM` — e.g. `14:30` or `2:30 PM`)_",
+                "**3️⃣  What time is the meeting? (Karachi time)**\n_(Format: e.g. `14:30` or `2:30 PM`)_",
                 lead.id,
             )
             if not time_raw or time_raw.lower() == "cancel":
