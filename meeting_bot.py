@@ -301,11 +301,31 @@ async def schedule_meeting(ctx: commands.Context):
         }
         scheduled_meetings[meeting_id] = meeting
 
+        # ── Pick the right success message based on time remaining ────────────
+        now_check = datetime.now(TIMEZONE)
+        mins_left = (meeting_dt - now_check).total_seconds() / 60
+
+        if mins_left <= 5:
+            # Link will be sent instantly — tell the lead
+            success_line = (
+                f"Your team has received invites now, plus here is the link of the meeting. "
+                f"The join link is being sent to everyone instantly."
+            )
+        elif mins_left <= 60:
+            success_line = (
+                f"Your team will receive invites now, plus a reminder and link "
+                f"**5 minutes** before the meeting."
+            )
+        else:
+            success_line = (
+                f"Your team will receive their invites now, plus reminders "
+                f"**1 hour** and **5 minutes** before the meeting."
+            )
+
         await dm.send(
             f"🎉 **Meeting scheduled successfully!**\n"
             f"**Meeting ID:** `{meeting_id}`\n"
-            f"Your team will receive their invites now, "
-            f"plus reminders **1 hour** and **5 minutes** before the meeting.\n"
+            f"{success_line}\n"
             f"Use `!cancelmeeting {meeting_id}` to cancel it at any time."
         )
         log.info("Meeting %s scheduled by lead %s for %s", meeting_id, lead.name, formatted_dt)
@@ -385,7 +405,6 @@ async def notify_meeting_scheduled(meeting: dict):
     lead_confirm = (
         f"✅ **Invites sent!** {notified}/{len(meeting['member_ids'])} members notified.\n\n"
         + build_meeting_card(meeting, f"📅 **Your scheduled meeting:**")
-        + f"\n\n🔔 Reminders will fire automatically **1 hour** and **5 minutes** before."
     )
     await dm_user(meeting["lead_id"], lead_confirm)
     log.info("Meeting %s: %d/%d members notified.", meeting["id"], notified, len(meeting["member_ids"]))
