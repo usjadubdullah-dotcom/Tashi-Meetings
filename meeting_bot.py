@@ -353,9 +353,19 @@ async def schedule_meeting(ctx: commands.Context):
         )
         log.info("Meeting %s scheduled by lead %s for %s", meeting_id, lead.name, formatted_dt)
 
-        # Send notifications and schedule reminders
-        await notify_meeting_scheduled(meeting)
-        bot.loop.create_task(schedule_reminders(meeting))
+        # ── Route to the right notification path based on time remaining ─────
+        if mins_left <= 5:
+            # Send instant notification with link to everyone right now
+            await send_instant_meeting_now(meeting)
+            scheduled_meetings.pop(meeting_id, None)
+        elif mins_left <= 60:
+            # Send invite without link now, then schedule the 5-min link reminder
+            await notify_meeting_scheduled(meeting)
+            bot.loop.create_task(schedule_reminders(meeting))
+        else:
+            # Normal flow: invite now, 1-hour reminder, 5-min link reminder
+            await notify_meeting_scheduled(meeting)
+            bot.loop.create_task(schedule_reminders(meeting))
 
     finally:
         active_schedulers.discard(lead.id)
