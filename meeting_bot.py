@@ -1,7 +1,7 @@
 """
 Discord Meeting Bot — Tashi Meetings
 ======================================
-Team leads schedule meetings via !schedulemeeting command (DM or any channel).
+Team leads schedule meetings via !meeting command (DM or any channel).
 Bot collects meeting details, notifies all assigned members via DM.
 Sends a 1-hour reminder and a 5-minute reminder with a Google Meet link.
 
@@ -135,7 +135,7 @@ async def ask(channel, question: str, author_id: int, timeout: int = 120) -> str
     except asyncio.TimeoutError:
         await channel.send(
             "⏰ **No response received.** Scheduling session cancelled. "
-            "Run `!schedulemeeting` again whenever you're ready."
+            "Run `!meeting` again whenever you're ready."
         )
         return None
 
@@ -202,7 +202,7 @@ def parse_datetime(date_str: str, time_str: str) -> datetime | None:
 
 # ── Main scheduling conversation ───────────────────────────────────────────────
 
-@bot.command(name="schedulemeeting")
+@bot.command(name="meeting")
 @is_any_team_lead()
 async def schedule_meeting(ctx: commands.Context):
     """
@@ -289,7 +289,7 @@ async def schedule_meeting(ctx: commands.Context):
         if meeting_dt <= now:
             await dm.send(
                 "⚠️ That date and time is already in the past. Scheduling cancelled.\n"
-                "Run `!schedulemeeting` again with a future date and time."
+                "Run `!meeting` again with a future date and time."
             )
             return
 
@@ -309,7 +309,7 @@ async def schedule_meeting(ctx: commands.Context):
             lead.id,
         )
         if not confirm or confirm.lower() != "confirm":
-            await dm.send("🚫 Scheduling cancelled. Run `!schedulemeeting` to start again.")
+            await dm.send("🚫 Scheduling cancelled. Run `!meeting` to start again.")
             return
 
         # ── Save meeting & kick off reminders ──────────────────────────────────
@@ -719,7 +719,7 @@ async def my_meetings(ctx: commands.Context):
     ]
 
     if not lead_meetings:
-        await ctx.send("📭 You have no upcoming meetings scheduled.\nUse `!schedulemeeting` to create one.")
+        await ctx.send("📭 You have no upcoming meetings scheduled.\nUse `!meeting` to create one.")
         return
 
     lead_meetings.sort(key=lambda m: m["datetime"])
@@ -740,7 +740,7 @@ async def meet_help(ctx: commands.Context):
     """Shows available commands."""
     await ctx.send(
         "📖 **Tashi Meetings Bot — Commands**\n\n"
-        "`!schedulemeeting` — Schedule a new meeting with your team _(team leads only)_\n"
+        "`!meeting` — Schedule a new meeting with your team _(team leads only)_\n"
         "`!mymeetings` — View all your upcoming meetings _(team leads only)_\n"
         "`!cancelmeeting <ID>` — Cancel a meeting by its ID _(team leads only)_\n"
         "`!meethelp` — Show this help message\n\n"
@@ -760,7 +760,7 @@ async def on_ready():
     log.info("Timezone: Asia/Karachi (PKT)")
     log.info("Team leads configured: %d", len(TEAM_LEADS))
     log.info("Members configured: %d", len(MEMBER_CONFIG))
-    log.info("Use !schedulemeeting to schedule a meeting.")
+    log.info("Use !meeting to schedule a meeting.")
     log.info("═" * 50)
 
 
