@@ -148,7 +148,8 @@ def parse_datetime(date_str: str, time_str: str) -> datetime | None:
     date_str = date_str.strip()
     time_str = time_str.strip()
 
-    date_formats = ["%d/%m/%Y", "%d-%m-%Y", "%d/%m/%y", "%d-%m-%y"]
+    date_formats = ["%d/%m/%Y", "%d-%m-%Y", "%d/%m/%y", "%d-%m-%y",
+                    "%d/%m/%Y", "%-d/%-m/%Y", "%d/%m/%Y"]
     time_formats = ["%H:%M", "%I:%M %p", "%I:%M%p", "%I %p", "%I%p"]
 
     parsed_date = None
@@ -159,16 +160,38 @@ def parse_datetime(date_str: str, time_str: str) -> datetime | None:
         except ValueError:
             continue
 
+    # Fallback: manually parse d/m/yyyy to handle 23/4/2026 style
+    if not parsed_date:
+        try:
+            parts = date_str.replace("-", "/").split("/")
+            if len(parts) == 3:
+                d, m, y = int(parts[0]), int(parts[1]), int(parts[2])
+                if y < 100:
+                    y += 2000
+                parsed_date = datetime(y, m, d).date()
+        except Exception:
+            pass
+
     if not parsed_date:
         return None
 
     parsed_time = None
     for fmt in time_formats:
         try:
-            parsed_time = datetime.strptime(time_str.upper(), fmt).time()
+            parsed_time = datetime.strptime(time_str.upper().strip(), fmt).time()
             break
         except ValueError:
             continue
+
+    # Fallback: try stripping extra spaces between time and AM/PM
+    if not parsed_time:
+        normalized = " ".join(time_str.upper().split())
+        for fmt in time_formats:
+            try:
+                parsed_time = datetime.strptime(normalized, fmt).time()
+                break
+            except ValueError:
+                continue
 
     if not parsed_time:
         return None
